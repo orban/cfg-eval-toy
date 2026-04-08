@@ -1,0 +1,48 @@
+// CFG for ClickHouse SELECT queries against the orders table.
+// Hand-written, restrictive by design: only the subset of SQL the eval cases use.
+// Uses explicit SP/COMMA terminals to keep whitespace deterministic (Lark-for-LLM pattern).
+
+start: select_stmt
+
+SP: " "
+COMMA: ","
+
+select_stmt: "SELECT" SP select_list SP "FROM" SP "orders" (SP where_clause)? (SP group_by_clause)? (SP limit_clause)?
+
+select_list: select_item (COMMA SP select_item)*
+select_item: aggregate | column | "*"
+
+aggregate: AGG_FN "(" agg_arg ")"
+AGG_FN: "sum" | "avg" | "count" | "min" | "max"
+agg_arg: column | "*"
+
+column: "order_id" | "customer_id" | "order_purchase_timestamp" | "order_status" | "price" | "freight_value" | "customer_state" | "payment_type"
+
+where_clause: "WHERE" SP condition (SP LOGIC_OP SP condition)*
+LOGIC_OP: "AND" | "OR"
+
+condition: time_predicate | status_predicate | state_predicate | payment_predicate | numeric_predicate
+
+time_predicate: "order_purchase_timestamp" SP CMP SP time_expr
+CMP: ">=" | "<=" | ">" | "<" | "="
+
+time_expr: "now()" SP "-" SP "INTERVAL" SP INT SP INTERVAL_UNIT
+INTERVAL_UNIT: "HOUR" | "DAY" | "WEEK" | "MONTH"
+
+status_predicate: "order_status" SP EQ SP status_value
+EQ: "=" | "!="
+status_value: "'delivered'" | "'shipped'" | "'canceled'" | "'processing'"
+
+state_predicate: "customer_state" SP EQ SP state_value
+state_value: "'CA'" | "'NY'" | "'TX'" | "'FL'" | "'WA'" | "'IL'" | "'OR'" | "'MA'" | "'CO'" | "'AZ'"
+
+payment_predicate: "payment_type" SP EQ SP payment_value
+payment_value: "'credit_card'" | "'debit_card'" | "'boleto'" | "'voucher'"
+
+numeric_predicate: ("price" | "freight_value") SP CMP SP NUMBER
+
+group_by_clause: "GROUP" SP "BY" SP column (COMMA SP column)*
+limit_clause: "LIMIT" SP INT
+
+INT: /[0-9]+/
+NUMBER: /[0-9]+(\.[0-9]+)?/
