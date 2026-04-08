@@ -6,13 +6,24 @@
 import { runPipeline } from "./pipeline";
 import type { EvalCase, TrialResult } from "./types";
 
+// Extracts an inline (?flags) prefix and returns [body, flags]. JavaScript
+// RegExp doesn't accept inline flag syntax, so we handle it manually here.
+function splitInlineFlags(pattern: string): [string, string] {
+  const match = pattern.match(/^\(\?([a-z]+)\)/);
+  if (!match) return [pattern, ""];
+  return [pattern.slice(match[0].length), match[1]];
+}
+
 function checkPatterns(sql: string, patterns: Record<string, string>): string[] {
   const failed: string[] = [];
   for (const [name, pattern] of Object.entries(patterns)) {
     try {
-      if (!new RegExp(pattern).test(sql)) failed.push(name);
-    } catch {
-      // Malformed regex in cases.yaml — treat as a miss rather than crash.
+      const [body, flags] = splitInlineFlags(pattern);
+      if (!new RegExp(body, flags).test(sql)) failed.push(name);
+    } catch (e) {
+      // Malformed regex in cases.yaml — log server-side so it doesn't silently
+      // look identical to a content miss, but don't crash the eval run.
+      console.error(`[eval-runner] bad regex for pattern "${name}":`, e);
       failed.push(name);
     }
   }
