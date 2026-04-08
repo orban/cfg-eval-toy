@@ -8,13 +8,13 @@ import type { EvalCase, TrialResult } from "./types";
 
 // Extracts an inline (?flags) prefix and returns [body, flags]. JavaScript
 // RegExp doesn't accept inline flag syntax, so we handle it manually here.
-function splitInlineFlags(pattern: string): [string, string] {
+export function splitInlineFlags(pattern: string): [string, string] {
   const match = pattern.match(/^\(\?([a-z]+)\)/);
   if (!match) return [pattern, ""];
   return [pattern.slice(match[0].length), match[1]];
 }
 
-function checkPatterns(sql: string, patterns: Record<string, string>): string[] {
+export function checkPatterns(sql: string, patterns: Record<string, string>): string[] {
   const failed: string[] = [];
   for (const [name, pattern] of Object.entries(patterns)) {
     try {
