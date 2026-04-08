@@ -9,10 +9,24 @@ import type { QueryResult } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_NL_LENGTH = 2000;
+
 export async function POST(req: Request) {
-  const body = (await req.json()) as { nl?: string };
-  if (!body.nl || typeof body.nl !== "string" || !body.nl.trim()) {
+  let body: { nl?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+  }
+
+  if (typeof body?.nl !== "string" || !body.nl.trim()) {
     return NextResponse.json({ error: "nl is required" }, { status: 400 });
+  }
+  if (body.nl.length > MAX_NL_LENGTH) {
+    return NextResponse.json(
+      { error: `nl too long (max ${MAX_NL_LENGTH} chars)` },
+      { status: 400 }
+    );
   }
 
   const pipe = await runPipeline(body.nl);
