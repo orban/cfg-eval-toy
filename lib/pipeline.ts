@@ -33,12 +33,30 @@ export async function runPipeline(nl: string): Promise<PipelineResult> {
     };
   }
 
-  const pinnedNow = await getPinnedNow();
-  const ready = rewriteNowInSql(sql, pinnedNow);
-  const result = await runQuery(ready);
+  try {
+    const pinnedNow = await getPinnedNow();
+    const ready = rewriteNowInSql(sql, pinnedNow);
+    const result = await runQuery(ready);
 
-  if (!result.ok) {
-    const err = sanitizeError(new Error(result.error), "runQuery");
+    if (!result.ok) {
+      const err = sanitizeError(result.cause ?? new Error(result.error), "runQuery");
+      return {
+        sql,
+        rows: null,
+        elapsedMs: Date.now() - start,
+        stage: "db_fail",
+        error: err.message,
+      };
+    }
+
+    return {
+      sql,
+      rows: result.rows,
+      elapsedMs: Date.now() - start,
+      stage: "ok",
+    };
+  } catch (e) {
+    const err = sanitizeError(e, "runPipeline/db");
     return {
       sql,
       rows: null,
@@ -47,11 +65,4 @@ export async function runPipeline(nl: string): Promise<PipelineResult> {
       error: err.message,
     };
   }
-
-  return {
-    sql,
-    rows: result.rows,
-    elapsedMs: Date.now() - start,
-    stage: "ok",
-  };
 }

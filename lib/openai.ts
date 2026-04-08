@@ -69,6 +69,7 @@ export async function generateSql(nl: string): Promise<string> {
   const output = (response as { output?: { type?: string }[] }).output ?? [];
   const toolCall = output.find(isCustomToolCall);
   if (!toolCall || !toolCall.input) {
+    console.error("[generateSql] no custom_tool_call in output:", JSON.stringify(output));
     throw new Error("grammar-constrained generation returned no SQL");
   }
   return toolCall.input.trim();

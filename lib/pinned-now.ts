@@ -15,7 +15,10 @@ export async function getPinnedNow(): Promise<string> {
     query: `SELECT toString(max(order_purchase_timestamp)) AS pinned FROM ${ORDERS_TABLE}`,
     format: "JSONEachRow",
   });
-  const rows = (await result.json()) as { pinned: string }[];
+  const rows = (await result.json()) as { pinned?: string }[];
+  if (!rows[0]?.pinned) {
+    throw new Error("pinned-now: orders table is empty or returned no timestamp");
+  }
   cached = rows[0].pinned;
   return cached;
 }

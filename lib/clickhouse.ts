@@ -18,7 +18,7 @@ export async function runQuery(
   sql: string
 ): Promise<
   | { ok: true; rows: Record<string, unknown>[] }
-  | { ok: false; error: string }
+  | { ok: false; error: string; cause: unknown }
 > {
   try {
     const result = await getClickHouseClient().query({
@@ -28,6 +28,13 @@ export async function runQuery(
     const rows = (await result.json()) as Record<string, unknown>[];
     return { ok: true, rows };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    // Log the original error so its .cause/.stack aren't lost when the
+    // message gets re-wrapped higher up.
+    console.error("[runQuery]", e);
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      cause: e,
+    };
   }
 }

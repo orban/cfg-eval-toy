@@ -18,14 +18,35 @@ export default function Home() {
   async function runQueryCall() {
     setLoading(true);
     setResult(null);
-    const res = await fetch("/api/query", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nl }),
-    });
-    const data = (await res.json()) as QueryResult;
-    setResult(data);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nl }),
+      });
+      if (!res.ok) {
+        setResult({
+          sql: "",
+          rows: null,
+          elapsedMs: 0,
+          stage: "grammar_fail",
+          error: `request failed (${res.status})`,
+        });
+        return;
+      }
+      const data = (await res.json()) as QueryResult;
+      setResult(data);
+    } catch (e) {
+      setResult({
+        sql: "",
+        rows: null,
+        elapsedMs: 0,
+        stage: "grammar_fail",
+        error: `request failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
