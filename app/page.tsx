@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { QueryResult } from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { QueryResult, TrialResult } from "@/lib/types";
 
 const EXAMPLES = [
   "sum the total of all orders placed in the last 30 hours",
@@ -28,6 +28,28 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 500,
 };
 
+const cardStyle: React.CSSProperties = {
+  background: cardBg,
+  border: `1px solid ${subtleBorder}`,
+  borderRadius: 8,
+  padding: 28,
+  marginBottom: 24,
+};
+
+interface CaseSummary {
+  id: string;
+  intent: string;
+  nl: string;
+}
+
+interface CaseReport {
+  caseId: string;
+  nl: string;
+  trials: TrialResult[];
+  passes: number;
+  passRate: number;
+}
+
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "number") {
@@ -38,7 +60,7 @@ function formatCell(value: unknown): string {
   return String(value);
 }
 
-function ExampleChip({
+function Chip({
   text,
   active,
   onClick,
@@ -70,8 +92,7 @@ function ExampleChip({
   );
 }
 
-function StatusDot({ stage }: { stage: QueryResult["stage"] }) {
-  const color = stage === "ok" ? okGreen : errRed;
+function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
       aria-hidden
@@ -80,7 +101,7 @@ function StatusDot({ stage }: { stage: QueryResult["stage"] }) {
         width: 6,
         height: 6,
         borderRadius: "50%",
-        background: color,
+        background: ok ? okGreen : errRed,
         marginRight: 6,
         verticalAlign: "middle",
       }}
@@ -89,9 +110,27 @@ function StatusDot({ stage }: { stage: QueryResult["stage"] }) {
 }
 
 export default function Home() {
+  // --- Query (baseline) state ---
   const [nl, setNl] = useState(EXAMPLES[0]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
+
+  // --- Reliability panel state ---
+  const [cases, setCases] = useState<CaseSummary[] | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>("");
+  const [trials, setTrials] = useState(5);
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalReport, setEvalReport] = useState<CaseReport | null>(null);
+
+  useEffect(() => {
+    fetch("/api/cases")
+      .then((r) => r.json())
+      .then((data: { canonical: CaseSummary[] }) => {
+        setCases(data.canonical);
+        if (data.canonical.length > 0) setSelectedCaseId(data.canonical[0].id);
+      })
+      .catch(() => setCases([]));
+  }, []);
 
   async function runQueryCall() {
     setLoading(true);
@@ -124,6 +163,30 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runEvalCall() {
+    if (!selectedCaseId) return;
+    setEvalLoading(true);
+    setEvalReport(null);
+    try {
+      const res = await fetch("/api/eval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseIds: [selectedCaseId], trialsPerCase: trials }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        console.error("[eval] bad response", body);
+        return;
+      }
+      const data = (await res.json()) as { reports: CaseReport[] };
+      setEvalReport(data.reports[0] ?? null);
+    } catch (e) {
+      console.error("[eval] request failed", e);
+    } finally {
+      setEvalLoading(false);
     }
   }
 
@@ -160,25 +223,13 @@ export default function Home() {
         </p>
       </header>
 
-      <section
-        style={{
-          background: cardBg,
-          border: `1px solid ${subtleBorder}`,
-          borderRadius: 8,
-          padding: 28,
-          marginBottom: 24,
-        }}
-      >
+      {/* ───────── Query card ───────── */}
+      <section style={cardStyle}>
         <div style={{ ...labelStyle, marginBottom: 12 }}>Query</div>
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
           {EXAMPLES.map((ex) => (
-            <ExampleChip
-              key={ex}
-              text={ex}
-              active={nl === ex}
-              onClick={() => setNl(ex)}
-            />
+            <Chip key={ex} text={ex} active={nl === ex} onClick={() => setNl(ex)} />
           ))}
         </div>
 
@@ -221,15 +272,9 @@ export default function Home() {
         </button>
       </section>
 
+      {/* ───────── Query result card ───────── */}
       {result && (
-        <section
-          style={{
-            background: cardBg,
-            border: `1px solid ${subtleBorder}`,
-            borderRadius: 8,
-            padding: 28,
-          }}
-        >
+        <section style={cardStyle}>
           <div
             style={{
               display: "flex",
@@ -240,7 +285,7 @@ export default function Home() {
           >
             <div style={labelStyle}>Generated SQL</div>
             <div style={{ fontSize: 11, color: mutedInk, letterSpacing: "0.05em" }}>
-              <StatusDot stage={result.stage} />
+              <StatusDot ok={result.stage === "ok"} />
               {result.elapsedMs}ms · {result.stage}
             </div>
           </div>
@@ -301,13 +346,7 @@ export default function Home() {
                   borderRadius: 6,
                 }}
               >
-                <table
-                  style={{
-                    borderCollapse: "collapse",
-                    width: "100%",
-                    fontSize: 13,
-                  }}
-                >
+                <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
                   <thead>
                     <tr>
                       {Object.keys(result.rows[0]).map((k) => (
@@ -364,6 +403,182 @@ export default function Home() {
           )}
         </section>
       )}
+
+      {/* ───────── Reliability panel card ───────── */}
+      <section style={cardStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: 12,
+          }}
+        >
+          <div style={labelStyle}>Reliability</div>
+          <div style={{ fontSize: 11, color: mutedInk, letterSpacing: "0.05em" }}>
+            Mode A · stochasticity
+          </div>
+        </div>
+
+        <p style={{ color: mutedInk, fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
+          Run the same eval case multiple times and watch what varies. Every trial
+          goes through the same NL → grammar → SQL → ClickHouse pipeline the query
+          box uses.
+        </p>
+
+        {!cases && (
+          <div style={{ fontSize: 13, color: mutedInk }}>Loading cases…</div>
+        )}
+
+        {cases && cases.length === 0 && (
+          <div style={{ fontSize: 13, color: errRed }}>
+            No canonical cases found. Check evals/cases.yaml.
+          </div>
+        )}
+
+        {cases && cases.length > 0 && (
+          <>
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+                marginBottom: 12,
+              }}
+            >
+              <label style={{ fontSize: 13, color: mutedInk }}>
+                Case:{" "}
+                <select
+                  value={selectedCaseId}
+                  onChange={(e) => setSelectedCaseId(e.target.value)}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 10px",
+                    border: `1px solid ${subtleBorder}`,
+                    borderRadius: 4,
+                    background: cardBg,
+                    color: ink,
+                    fontFamily: "inherit",
+                    maxWidth: 400,
+                  }}
+                >
+                  {cases.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nl}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ fontSize: 13, color: mutedInk }}>
+                Trials:{" "}
+                <input
+                  type="number"
+                  value={trials}
+                  onChange={(e) => setTrials(Math.max(1, Math.min(5, parseInt(e.target.value, 10) || 1)))}
+                  min={1}
+                  max={5}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 8px",
+                    border: `1px solid ${subtleBorder}`,
+                    borderRadius: 4,
+                    background: cardBg,
+                    color: ink,
+                    fontFamily: "inherit",
+                    width: 60,
+                  }}
+                />
+              </label>
+              <button
+                onClick={runEvalCall}
+                disabled={evalLoading || !selectedCaseId}
+                style={{
+                  padding: "8px 18px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  background: evalLoading || !selectedCaseId ? "#9ca3af" : ink,
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: evalLoading || !selectedCaseId ? "default" : "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {evalLoading ? `Running ${trials}…` : `Run ${trials} trials`}
+              </button>
+            </div>
+          </>
+        )}
+
+        {evalReport && (
+          <div
+            style={{
+              marginTop: 20,
+              paddingTop: 20,
+              borderTop: `1px solid ${subtleBorder}`,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ fontSize: 24, fontWeight: 600, color: ink, fontVariantNumeric: "tabular-nums" }}>
+                {evalReport.passes}/{evalReport.trials.length}{" "}
+                <span style={{ fontSize: 14, color: mutedInk, fontWeight: 400 }}>
+                  passed · {(evalReport.passRate * 100).toFixed(0)}%
+                </span>
+              </div>
+              <StatusDot ok={evalReport.passRate === 1} />
+            </div>
+
+            <details style={{ fontSize: 12 }}>
+              <summary
+                style={{
+                  cursor: "pointer",
+                  color: mutedInk,
+                  padding: "6px 0",
+                }}
+              >
+                Trial details ({evalReport.trials.length})
+              </summary>
+              <ol style={{ paddingLeft: 20, marginTop: 8 }}>
+                {evalReport.trials.map((t, i) => (
+                  <li key={i} style={{ marginBottom: 10 }}>
+                    <span style={{ color: t.passed ? okGreen : errRed, fontWeight: 500 }}>
+                      {t.passed ? "PASS" : "FAIL"}
+                    </span>{" "}
+                    <span style={{ color: mutedInk }}>({t.stage})</span>
+                    <pre
+                      style={{
+                        fontSize: 11,
+                        background: codeBg,
+                        padding: 8,
+                        borderRadius: 4,
+                        marginTop: 4,
+                        marginBottom: 0,
+                        overflow: "auto",
+                        fontFamily: '"SF Mono", Menlo, Monaco, monospace',
+                      }}
+                    >
+                      {t.sql || "(none)"}
+                    </pre>
+                    {t.error && (
+                      <div style={{ color: errRed, marginTop: 4, fontSize: 11 }}>
+                        {t.error}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          </div>
+        )}
+      </section>
     </main>
   );
 }
