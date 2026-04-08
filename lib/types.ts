@@ -17,7 +17,6 @@ export interface TrialResult {
   rows?: Record<string, unknown>[];
   error?: string;
   failedPatterns?: string[];
-  failureMode?: string;
 }
 
 export interface EvalCase {
