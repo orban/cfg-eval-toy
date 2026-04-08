@@ -1,0 +1,31 @@
+{
+  "name": "raindrop-takehome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CFG-constrained NL-to-SQL eval toy for the Raindrop take-home",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ingest": "tsx --env-file=.env.local scripts/ingest.ts",
+    "generate-data": "python scripts/generate-dataset.py"
+  },
+  "dependencies": {
+    "@clickhouse/client-web": "^1.18.2",
+    "next": "^16.2.3",
+    "openai": "^6.33.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.3"
+  }
+}
