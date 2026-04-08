@@ -7,5 +7,6 @@ node_modules/
 dist/
 .vercel
 .playwright-mcp/
+chdata/
 exploration-log.md
 exploration-log-after-fix.md
