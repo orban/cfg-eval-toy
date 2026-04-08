@@ -1,6 +1,6 @@
 // POST /api/eval — runs one or more eval cases N times each, returns a
-// report per case with raw pass counts. Wilson CI + variant grouping come
-// in Phase 5 (Task 19).
+// report per case with pass count, Wilson confidence interval, and a list
+// of distinct SQL variants produced across the trials.
 //
 // Serial execution is deliberate: we want to respect OpenAI rate limits and
 // the sharpest demo point is watching Mode A on a single case. Parallelism
@@ -9,6 +9,8 @@
 import { NextResponse } from "next/server";
 import { getCaseById } from "@/lib/eval-cases";
 import { runTrial } from "@/lib/eval-runner";
+import { wilsonCI, confidenceLabel } from "@/lib/stats";
+import type { ConfidenceInterval } from "@/lib/stats";
 import type { TrialResult } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -24,12 +26,50 @@ interface EvalRequest {
   trialsPerCase: number;
 }
 
+interface VariantGroup {
+  sql: string;
+  count: number;
+  passed: boolean;
+  firstError?: string;
+}
+
 interface CaseReport {
   caseId: string;
   nl: string;
   trials: TrialResult[];
   passes: number;
   passRate: number;
+  ci: ConfidenceInterval;
+  confidence: "LOW" | "MED" | "HIGH";
+  variants: VariantGroup[];
+}
+
+// Group trials by exact raw SQL string (no canonicalization). Two trials
+// that differ only in whitespace get listed separately — that's honest.
+// Collapsing them would be the kind of thing that hides real variance.
+function groupVariants(trials: TrialResult[]): VariantGroup[] {
+  const map = new Map<string, VariantGroup>();
+  for (const t of trials) {
+    const key = t.sql || "(no SQL)";
+    const existing = map.get(key);
+    if (existing) {
+      existing.count += 1;
+      // If any trial for this SQL was a fail, keep the group as fail with
+      // the first error we saw.
+      if (!t.passed && existing.passed) {
+        existing.passed = false;
+        existing.firstError = t.error;
+      }
+    } else {
+      map.set(key, {
+        sql: key,
+        count: 1,
+        passed: t.passed,
+        firstError: t.passed ? undefined : t.error,
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count);
 }
 
 export async function POST(req: Request) {
@@ -72,12 +112,16 @@ export async function POST(req: Request) {
     }
 
     const passes = trials.filter((t) => t.passed).length;
+    const ci = wilsonCI(passes, trials.length);
     reports.push({
       caseId: caseDef.id,
       nl: caseDef.nl,
       trials,
       passes,
       passRate: trials.length > 0 ? passes / trials.length : 0,
+      ci,
+      confidence: confidenceLabel(ci),
+      variants: groupVariants(trials),
     });
   }
 

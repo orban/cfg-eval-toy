@@ -42,12 +42,27 @@ interface CaseSummary {
   nl: string;
 }
 
+interface ConfidenceInterval {
+  low: number;
+  high: number;
+}
+
+interface VariantGroup {
+  sql: string;
+  count: number;
+  passed: boolean;
+  firstError?: string;
+}
+
 interface CaseReport {
   caseId: string;
   nl: string;
   trials: TrialResult[];
   passes: number;
   passRate: number;
+  ci: ConfidenceInterval;
+  confidence: "LOW" | "MED" | "HIGH";
+  variants: VariantGroup[];
 }
 
 function formatCell(value: unknown): string {
@@ -524,10 +539,18 @@ export default function Home() {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "baseline",
-                marginBottom: 12,
+                marginBottom: 4,
               }}
             >
-              <div style={{ fontSize: 24, fontWeight: 600, color: ink, fontVariantNumeric: "tabular-nums" }}>
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 600,
+                  color: ink,
+                  fontVariantNumeric: "tabular-nums",
+                  letterSpacing: "-0.01em",
+                }}
+              >
                 {evalReport.passes}/{evalReport.trials.length}{" "}
                 <span style={{ fontSize: 14, color: mutedInk, fontWeight: 400 }}>
                   passed · {(evalReport.passRate * 100).toFixed(0)}%
@@ -536,46 +559,110 @@ export default function Home() {
               <StatusDot ok={evalReport.passRate === 1} />
             </div>
 
-            <details style={{ fontSize: 12 }}>
-              <summary
+            {/* Wilson CI + confidence band */}
+            <div
+              style={{
+                fontSize: 12,
+                color: mutedInk,
+                marginBottom: 16,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              95% CI: {(evalReport.ci.low * 100).toFixed(0)}
+              –{(evalReport.ci.high * 100).toFixed(0)}%{"  ·  "}
+              <span
                 style={{
-                  cursor: "pointer",
-                  color: mutedInk,
-                  padding: "6px 0",
+                  color:
+                    evalReport.confidence === "LOW"
+                      ? "#c92a2a"
+                      : evalReport.confidence === "MED"
+                      ? "#e67700"
+                      : okGreen,
+                  fontWeight: 500,
                 }}
               >
-                Trial details ({evalReport.trials.length})
-              </summary>
-              <ol style={{ paddingLeft: 20, marginTop: 8 }}>
-                {evalReport.trials.map((t, i) => (
-                  <li key={i} style={{ marginBottom: 10 }}>
-                    <span style={{ color: t.passed ? okGreen : errRed, fontWeight: 500 }}>
-                      {t.passed ? "PASS" : "FAIL"}
-                    </span>{" "}
-                    <span style={{ color: mutedInk }}>({t.stage})</span>
+                confidence: {evalReport.confidence}
+              </span>
+              {evalReport.confidence === "LOW" && (
+                <span style={{ color: mutedInk, fontWeight: 400 }}>
+                  {"  "}— n={evalReport.trials.length} isn't enough to commit to a reliability claim
+                </span>
+              )}
+            </div>
+
+            {/* Distinct SQL variants */}
+            <div style={{ marginBottom: 12 }}>
+              <div
+                style={{
+                  ...labelStyle,
+                  marginBottom: 8,
+                }}
+              >
+                Distinct SQL variants · {evalReport.variants.length}
+              </div>
+              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                {evalReport.variants.map((v, i) => (
+                  <li key={i} style={{ marginBottom: 8 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 10,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: v.passed ? okGreen : errRed,
+                          fontWeight: 500,
+                          fontSize: 11,
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        {v.passed ? "PASS" : "FAIL"}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: mutedInk,
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {v.count}×
+                      </span>
+                    </div>
                     <pre
                       style={{
                         fontSize: 11,
+                        lineHeight: 1.5,
                         background: codeBg,
-                        padding: 8,
+                        padding: 10,
                         borderRadius: 4,
-                        marginTop: 4,
-                        marginBottom: 0,
+                        margin: 0,
                         overflow: "auto",
+                        border: `1px solid ${subtleBorder}`,
                         fontFamily: '"SF Mono", Menlo, Monaco, monospace',
+                        color: ink,
                       }}
                     >
-                      {t.sql || "(none)"}
+                      {v.sql}
                     </pre>
-                    {t.error && (
-                      <div style={{ color: errRed, marginTop: 4, fontSize: 11 }}>
-                        {t.error}
+                    {v.firstError && (
+                      <div
+                        style={{
+                          color: errRed,
+                          marginTop: 4,
+                          fontSize: 11,
+                          paddingLeft: 4,
+                        }}
+                      >
+                        {v.firstError}
                       </div>
                     )}
                   </li>
                 ))}
-              </ol>
-            </details>
+              </ul>
+            </div>
           </div>
         )}
       </section>
