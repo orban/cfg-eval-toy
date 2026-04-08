@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.env.local
+.env*.local
+*.log
+.DS_Store
+dist/
+.vercel
+.playwright-mcp/
+exploration-log.md
+exploration-log-after-fix.md
