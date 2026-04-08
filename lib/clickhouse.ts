@@ -1,6 +1,9 @@
 // ClickHouse client singleton + runQuery helper.
+// Uses the Node build (@clickhouse/client), not the edge/browser build
+// (@clickhouse/client-web) — the latter has subtly different query-routing
+// behavior that made SHOW TABLES work via curl but not via the client.
 
-import { createClient, ClickHouseClient } from "@clickhouse/client-web";
+import { createClient, ClickHouseClient } from "@clickhouse/client";
 
 let client: ClickHouseClient | null = null;
 
@@ -10,6 +13,7 @@ export function getClickHouseClient(): ClickHouseClient {
     url: process.env.CLICKHOUSE_URL,
     username: process.env.CLICKHOUSE_USER,
     password: process.env.CLICKHOUSE_PASSWORD,
+    database: process.env.CLICKHOUSE_DATABASE ?? "default",
   });
   return client;
 }

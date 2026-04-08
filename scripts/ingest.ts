@@ -2,7 +2,7 @@
 // Run: npm run ingest
 // Also verifies ClickHouse connectivity by querying version() first.
 
-import { createClient } from "@clickhouse/client-web";
+import { createClient } from "@clickhouse/client";
 import { readFileSync } from "fs";
 import { CREATE_ORDERS_SQL, ORDERS_TABLE } from "../lib/schema";
 
