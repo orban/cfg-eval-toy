@@ -30,8 +30,57 @@ export function checkPatterns(sql: string, patterns: Record<string, string>): st
   return failed;
 }
 
+function checkExpectedValues(
+  rows: Record<string, unknown>[] | null | undefined,
+  caseDef: EvalCase
+): string | null {
+  if (caseDef.expected_scalar !== undefined) {
+    if (!rows || rows.length === 0) {
+      return `expected scalar ~${caseDef.expected_scalar}, got empty result set`;
+    }
+    const firstValue = Object.values(rows[0])[0];
+    const asNumber = typeof firstValue === "number" ? firstValue : Number(firstValue);
+    if (!Number.isFinite(asNumber)) {
+      return `expected scalar ~${caseDef.expected_scalar}, got non-numeric ${firstValue}`;
+    }
+    const expected = caseDef.expected_scalar;
+    const tolerance =
+      caseDef.expected_scalar_tolerance ?? Math.max(Math.abs(expected) * 0.005, 0.5);
+    if (Math.abs(asNumber - expected) > tolerance) {
+      return `expected scalar ~${expected} (±${tolerance}), got ${asNumber}`;
+    }
+  }
+  if (caseDef.expected_row_count !== undefined) {
+    const actualCount = rows?.length ?? 0;
+    if (actualCount !== caseDef.expected_row_count) {
+      return `expected ${caseDef.expected_row_count} rows, got ${actualCount}`;
+    }
+  }
+  return null;
+}
+
 export async function runTrial(caseDef: EvalCase): Promise<TrialResult> {
   const pipe = await runPipeline(caseDef.nl);
+
+  // Expected-stage cases: test that we land on one of a set of acceptable
+  // stages (e.g. SQL injection should either grammar_fail via refusal OR
+  // safely fall back to a benign SELECT). Pattern and value checks are skipped
+  // because the stage itself is the assertion.
+  if (caseDef.expected_stage) {
+    const allowed = Array.isArray(caseDef.expected_stage)
+      ? caseDef.expected_stage
+      : [caseDef.expected_stage];
+    if (allowed.includes(pipe.stage)) {
+      return { sql: pipe.sql, passed: true, stage: pipe.stage };
+    }
+    return {
+      sql: pipe.sql,
+      passed: false,
+      stage: pipe.stage,
+      rows: pipe.rows ?? undefined,
+      error: `expected stage in [${allowed.join(", ")}], got ${pipe.stage}`,
+    };
+  }
 
   if (pipe.stage === "grammar_fail") {
     return { sql: pipe.sql, passed: false, stage: "grammar_fail", error: pipe.error };
@@ -49,6 +98,17 @@ export async function runTrial(caseDef: EvalCase): Promise<TrialResult> {
       rows: pipe.rows ?? undefined,
       error: `pattern mismatch: ${failedPatterns.join(", ")}`,
       failedPatterns,
+    };
+  }
+
+  const valueError = checkExpectedValues(pipe.rows, caseDef);
+  if (valueError) {
+    return {
+      sql: pipe.sql,
+      passed: false,
+      stage: "value_mismatch",
+      rows: pipe.rows ?? undefined,
+      error: valueError,
     };
   }
 

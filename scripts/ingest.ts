@@ -28,7 +28,10 @@ async function main() {
 
   console.log("Reading CSV...");
   const csv = readFileSync("data/orders.csv", "utf-8");
-  const lines = csv.trim().split("\n");
+  // Split on CRLF or LF — Python's csv.writer emits CRLF on macOS, and the
+  // trailing \r on each line silently corrupts the last column (payment_type)
+  // into a phantom "payment_type\r" field that ClickHouse drops.
+  const lines = csv.trim().split(/\r?\n/);
   const header = lines[0].split(",");
   const rows = lines.slice(1).map((line) => {
     const values = line.split(",");
