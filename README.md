@@ -72,14 +72,16 @@ case N times, grouped by exact raw SQL, with Wilson 95% CIs:
 
 Full log: [`evals/exploration-pass-2026-04-08.txt`](evals/exploration-pass-2026-04-08.txt)
 
-**Result: 140/140 passed. 22/22 cases at 100% pass rate. But 10/22 showed
-multi-variant SQL** — GPT-5 is stochastic underneath, and the reliability
-panel is how you see it. Every drift case was semantically invariant (same
-answer, different SQL form), which is exactly what exact-value rigor is
-designed to catch.
+**140/140 trials passed. 22/22 cases at 100% pass rate. 10/22 cases
+produced multi-variant SQL** — the model picked different syntactic forms
+across repeated trials on the same prompt, inside the same CFG constraint.
+Every drift observed in this specific run produced the same answer, which
+is easy to read as "no big deal." It's not no big deal — that's just what
+140 trials at n=5 or n=10 happened to sample. The interesting unit isn't
+whether the eval passed. It's *how many ways* it passed.
 
-The sharpest example: `count_over_200_30d_canonical` split 5/5 across two
-WHERE-clause orderings.
+The sharpest live example: `count_over_200_30d_canonical` split 5/5 across
+two WHERE-clause orderings.
 
 ```sql
 -- 5 of 10 trials:
@@ -91,7 +93,10 @@ SELECT count(*) FROM orders
 WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY AND price > 200
 ```
 
-Observed drift kinds (all semantically invariant):
+Clean Bernoulli, same answer, two stable basins the model sampled from
+inside the grammar. The reliability panel in the UI reproduces this live.
+
+Observed drift kinds (semantically invariant inside the 140-trial run):
 
 | Kind | Example | Cases affected |
 |---|---|---|
@@ -100,10 +105,36 @@ Observed drift kinds (all semantically invariant):
 | Interval literal choice | `1 WEEK` ⇄ `7 DAY`, `1 MONTH` ⇄ `30 DAY` | 2 |
 | Refusal vs safe fallback | `grammar_fail` ⇄ benign `SELECT count(*)` | 1 (SQL injection) |
 
-Pattern-matching evals would have passed all of these. Exact-value rigor
-catches the cases where the *answer* actually drifts — which is why the eval
-suite asserts `expected_scalar` or `expected_row_count` on every canonical
-case, not just regex shape checks.
+### When drift isn't benign
+
+During eval development I hit one case where the drift *did* change the
+answer. The `count_over_200_30d_para2` paraphrase — "how many high-value
+orders were placed in the last month" — has GPT-5 choosing between
+`INTERVAL 30 DAY` and `INTERVAL 1 MONTH`. The grammar admits both. On this
+dataset's calendar boundary, `30 DAY` returns 65 rows and `1 MONTH` returns
+67 — calendar months are ~30.4 days, not exactly 30. Two grammatically
+legal productions, different semantics, different row counts.
+
+I had to widen `expected_scalar` to `66 ± 2` to accept both outcomes and
+leave a comment in [`evals/cases.yaml`](evals/cases.yaml) explaining the
+tolerance. The exploration pass didn't reproduce this drift — all 5 trials
+happened to pick `INTERVAL 1 MONTH` — which is the other thing the panel
+makes visible: small samples hide rare drift, and "100% pass at n=5" is a
+weaker claim than it looks.
+
+The load-bearing finding is this:
+
+> **CFG correctness is necessary but not sufficient.** The grammar can
+> admit two equally legal productions whose semantics differ on the actual
+> data. The only way to see that is to pin `NOW()` and assert on the
+> executed result, not on the generated string.
+
+Pinned `NOW()` + exact-scalar assertions + multi-trial sampling isn't a
+novel methodology — it's textbook execution accuracy applied with a little
+discipline. The contribution is the UI affordance: the reliability panel
+surfaces the artifact distribution (how many ways did this case pass?) as
+a first-class signal next to the pass rate. If you're building an
+observability product for LLMs, that's the shape of the primitive.
 
 ## Running locally
 
