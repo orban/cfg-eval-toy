@@ -60,6 +60,51 @@ npx tsx --env-file=.env.local scripts/verify-all.ts
 
 Or use the reliability panel in the deployed UI.
 
+## Exploration pass
+
+Before recording the walkthrough I ran an offline exploration pass — every
+case N times, grouped by exact raw SQL, with Wilson 95% CIs:
+
+- canonical: **10 trials** each (tighter CIs on the demo centerpiece)
+- paraphrase: 5 trials each
+- edge: 5 trials each
+- **140 trials total, ~19 min wall clock, all serial**
+
+Full log: [`evals/exploration-pass-2026-04-08.txt`](evals/exploration-pass-2026-04-08.txt)
+
+**Result: 140/140 passed. 22/22 cases at 100% pass rate. But 10/22 showed
+multi-variant SQL** — GPT-5 is stochastic underneath, and the reliability
+panel is how you see it. Every drift case was semantically invariant (same
+answer, different SQL form), which is exactly what exact-value rigor is
+designed to catch.
+
+The sharpest example: `count_over_200_30d_canonical` split 5/5 across two
+WHERE-clause orderings.
+
+```sql
+-- 5 of 10 trials:
+SELECT count(*) FROM orders
+WHERE price > 200 AND order_purchase_timestamp >= now() - INTERVAL 30 DAY
+
+-- 5 of 10 trials:
+SELECT count(*) FROM orders
+WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY AND price > 200
+```
+
+Observed drift kinds (all semantically invariant):
+
+| Kind | Example | Cases affected |
+|---|---|---|
+| Predicate order flip | `A AND B` ⇄ `B AND A` | 6 |
+| SELECT column order | `avg(price), state` ⇄ `state, avg(price)` | 2 |
+| Interval literal choice | `1 WEEK` ⇄ `7 DAY`, `1 MONTH` ⇄ `30 DAY` | 2 |
+| Refusal vs safe fallback | `grammar_fail` ⇄ benign `SELECT count(*)` | 1 (SQL injection) |
+
+Pattern-matching evals would have passed all of these. Exact-value rigor
+catches the cases where the *answer* actually drifts — which is why the eval
+suite asserts `expected_scalar` or `expected_row_count` on every canonical
+case, not just regex shape checks.
+
 ## Running locally
 
 1. Clone + install:

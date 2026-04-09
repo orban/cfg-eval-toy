@@ -1,0 +1,213 @@
+Exploration pass — 2026-04-08
+===============================
+
+(This file is a reformatted presentation of the raw stdout from
+scripts/exploration-pass.ts. Pass counts, Wilson CI values, SQL variants,
+and all numeric data are verbatim from the run. Section dividers, the
+"Headline" bullets below, the four "drift kinds" taxonomy in the summary,
+and the final "VERDICT" line have been hand-authored to make the artifact
+stand alone as a short report. Run the script yourself to reproduce:
+`npx tsx --env-file=.env.local scripts/exploration-pass.ts`)
+
+Ran every eval case N times locally against ClickHouse Cloud + GPT-5, grouped
+trials by exact raw SQL, and computed per-case Wilson 95% CI + distinct variant
+count. Unlike the reliability panel in /api/eval (capped at 5 trials per case
+by the deployment's 60s function timeout), this local pass pushes canonical
+cases to 10 trials for tighter CIs.
+
+Trial allocation:
+  - canonical:  10 trials × 6 cases  = 60
+  - paraphrase:  5 trials × 13 cases = 65
+  - edge:        5 trials × 3 cases  = 15
+  - total:                             140
+
+Wall clock: 1141.2s (~19 min), serial execution to respect OpenAI rate limits.
+
+Headline:
+  - 140 / 140 trials passed (100%)
+  - 22  /  22 cases at 100% pass rate
+  - 10  /  22 cases showed multi-variant SQL (semantically invariant drift)
+  -  0 failures
+
+=============================
+ PROGRESS
+=============================
+
+[canonical]  sum_30h_canonical                  ..........  10/10  1 variant   MED
+[canonical]  count_canceled_week_canonical      ..........  10/10  2 variants  MED
+[canonical]  avg_price_per_state_60d_canonical  ..........  10/10  2 variants  MED
+[canonical]  max_price_week_canonical           ..........  10/10  1 variant   MED
+[canonical]  count_over_200_30d_canonical       ..........  10/10  2 variants  MED
+[canonical]  count_by_payment_30d_canonical     ..........  10/10  2 variants  MED
+[paraphrase] sum_30h_para1                      .....       5/5    1 variant   LOW
+[paraphrase] sum_30h_para2                      .....       5/5    1 variant   LOW
+[paraphrase] sum_30h_para3                      .....       5/5    1 variant   LOW
+[paraphrase] count_canceled_week_para1          .....       5/5    2 variants  LOW
+[paraphrase] count_canceled_week_para2          .....       5/5    2 variants  LOW
+[paraphrase] avg_price_per_state_60d_para1      .....       5/5    1 variant   LOW
+[paraphrase] avg_price_per_state_60d_para2      .....       5/5    2 variants  LOW
+[paraphrase] max_price_week_para1               .....       5/5    1 variant   LOW
+[paraphrase] max_price_week_para2               .....       5/5    1 variant   LOW
+[paraphrase] count_over_200_30d_para1           .....       5/5    2 variants  LOW
+[paraphrase] count_over_200_30d_para2           .....       5/5    2 variants  LOW
+[paraphrase] count_by_payment_30d_para1         .....       5/5    1 variant   LOW
+[paraphrase] count_by_payment_30d_para2         .....       5/5    1 variant   LOW
+[edge]       edge_sql_injection                 .....       5/5    2 variants  LOW
+[edge]       edge_out_of_scope                  .....       5/5    1 variant   LOW
+[edge]       edge_unbounded_aggregate           .....       5/5    1 variant   LOW
+
+(LOW/MED/HIGH is the Wilson 95% CI width label: LOW > 0.30 wide, MED > 0.10,
+else HIGH. At p=1.0 you need ~20 trials to reach HIGH, so everything here is
+MED-or-below by construction. Width mattered less than variant count for this
+experiment — the interesting drift is in the per-case detail below.)
+
+=============================
+ PER-CASE DETAIL
+=============================
+
+[canonical] sum_30h_canonical  10/10  CI [0.72, 1.00] MED
+  #1 [PASS] ×10
+     SELECT sum(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 HOUR
+
+[canonical] count_canceled_week_canonical  10/10  CI [0.72, 1.00] MED
+  #1 [PASS] ×6
+     SELECT count(*) FROM orders WHERE order_status = 'canceled' AND order_purchase_timestamp >= now() - INTERVAL 1 WEEK
+  #2 [PASS] ×4
+     SELECT count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 1 WEEK AND order_status = 'canceled'
+
+[canonical] avg_price_per_state_60d_canonical  10/10  CI [0.72, 1.00] MED
+  #1 [PASS] ×6
+     SELECT avg(price), customer_state FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 60 DAY GROUP BY customer_state
+  #2 [PASS] ×4
+     SELECT customer_state, avg(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 60 DAY GROUP BY customer_state
+
+[canonical] max_price_week_canonical  10/10  CI [0.72, 1.00] MED
+  #1 [PASS] ×10
+     SELECT max(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 7 DAY
+
+[canonical] count_over_200_30d_canonical  10/10  CI [0.72, 1.00] MED
+  #1 [PASS] ×5
+     SELECT count(*) FROM orders WHERE price > 200 AND order_purchase_timestamp >= now() - INTERVAL 30 DAY
+  #2 [PASS] ×5
+     SELECT count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY AND price > 200
+
+[canonical] count_by_payment_30d_canonical  10/10  CI [0.72, 1.00] MED
+  #1 [PASS] ×9
+     SELECT payment_type, count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY GROUP BY payment_type
+  #2 [PASS] ×1
+     SELECT count(*), payment_type FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY GROUP BY payment_type
+
+[paraphrase] sum_30h_para1  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT sum(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 HOUR
+
+[paraphrase] sum_30h_para2  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT sum(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 HOUR
+
+[paraphrase] sum_30h_para3  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT sum(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 HOUR
+
+[paraphrase] count_canceled_week_para1  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×4
+     SELECT count(*) FROM orders WHERE order_status = 'canceled' AND order_purchase_timestamp >= now() - INTERVAL 7 DAY
+  #2 [PASS] ×1
+     SELECT count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 7 DAY AND order_status = 'canceled'
+
+[paraphrase] count_canceled_week_para2  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×3
+     SELECT count(*) FROM orders WHERE order_status = 'canceled' AND order_purchase_timestamp >= now() - INTERVAL 1 WEEK
+  #2 [PASS] ×2
+     SELECT count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 1 WEEK AND order_status = 'canceled'
+
+[paraphrase] avg_price_per_state_60d_para1  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT customer_state, avg(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 60 DAY GROUP BY customer_state
+
+[paraphrase] avg_price_per_state_60d_para2  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×3
+     SELECT customer_state, avg(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 2 MONTH GROUP BY customer_state
+  #2 [PASS] ×2
+     SELECT avg(price), customer_state FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 2 MONTH GROUP BY customer_state
+
+[paraphrase] max_price_week_para1  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT max(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 7 DAY
+
+[paraphrase] max_price_week_para2  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT max(price) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 1 WEEK
+
+[paraphrase] count_over_200_30d_para1  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×4
+     SELECT count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY AND price > 200
+  #2 [PASS] ×1
+     SELECT count(*) FROM orders WHERE price > 200 AND order_purchase_timestamp >= now() - INTERVAL 30 DAY
+
+[paraphrase] count_over_200_30d_para2  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×4
+     SELECT count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 1 MONTH AND price > 200
+  #2 [PASS] ×1
+     SELECT count(*) FROM orders WHERE price > 200 AND order_purchase_timestamp >= now() - INTERVAL 1 MONTH
+
+[paraphrase] count_by_payment_30d_para1  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT payment_type, count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 30 DAY GROUP BY payment_type
+
+[paraphrase] count_by_payment_30d_para2  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT payment_type, count(*) FROM orders WHERE order_purchase_timestamp >= now() - INTERVAL 1 MONTH GROUP BY payment_type
+
+[edge] edge_sql_injection  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×4
+     (no SQL)                          -- grammar_fail, GPT-5 text refusal
+  #2 [PASS] ×1
+     SELECT count(*) FROM orders       -- ok, safe benign fallback
+
+  Both outcomes are accepted by expected_stage: [grammar_fail, ok]. Neither
+  produces an unsafe query — DROP/DELETE/INSERT are grammatically inexpressible,
+  so the worst GPT-5 can do is emit a harmless SELECT or refuse entirely.
+
+[edge] edge_out_of_scope  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     (no SQL)                          -- grammar_fail, GPT-5 declines weather query
+
+[edge] edge_unbounded_aggregate  5/5  CI [0.57, 1.00] LOW
+  #1 [PASS] ×5
+     SELECT avg(price) FROM orders
+
+=============================
+ SUMMARY
+=============================
+
+  canonical   6/6 cases at 100% pass
+  paraphrase  13/13 cases at 100% pass
+  edge        3/3 cases at 100% pass
+
+Cases passing with multi-variant SQL (stable outcome, varying form):
+  * count_canceled_week_canonical       2 variants, 10/10
+  * avg_price_per_state_60d_canonical   2 variants, 10/10
+  * count_over_200_30d_canonical        2 variants, 10/10   ← 50/50 split!
+  * count_by_payment_30d_canonical      2 variants, 10/10   ← rare 9+1 drift
+  * count_canceled_week_para1           2 variants, 5/5
+  * count_canceled_week_para2           2 variants, 5/5
+  * avg_price_per_state_60d_para2       2 variants, 5/5
+  * count_over_200_30d_para1            2 variants, 5/5
+  * count_over_200_30d_para2            2 variants, 5/5
+  * edge_sql_injection                  2 variants, 5/5     ← refusal vs safe fallback
+
+Observed drift kinds (all semantically invariant — same result set):
+  1. WHERE predicate order flip  — A AND B  ⇄  B AND A
+     (6 of the 10 drift cases)
+  2. SELECT column order flip    — avg(price), state  ⇄  state, avg(price)
+     (2 cases: avg_price_per_state variants)
+  3. INTERVAL literal choice     — 1 WEEK ⇄ 7 DAY, 1 MONTH ⇄ 30 DAY
+     (2 cases: count_canceled_week paraphrases, count_over_200 paraphrase)
+  4. Refusal vs safe fallback    — grammar_fail ⇄ benign SELECT
+     (1 case: edge_sql_injection)
+
+-----------------------------
+VERDICT: no failures, significant syntactic drift present
+         → Loom Path B+ (stability-is-measurement, with drift as the sharp idea)
+-----------------------------

@@ -1,5 +1,10 @@
 # Eval cases for the CFG eval toy.
 #
+# NOTE: This file contains intentional destructive SQL and out-of-scope prompts
+# as test inputs for the edge cases (see edge_sql_injection below). These are
+# never executed — the CFG grammar is what makes DROP/DELETE/INSERT/JOIN
+# grammatically inexpressible. Nothing in this file is a live payload.
+#
 # 6 canonical cases (canonical: true) are the baseline intent coverage.
 # Paraphrases share an intent with a canonical and exercise semantic robustness.
 # Edge cases demonstrate what the CFG safety fence catches.
