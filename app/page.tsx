@@ -379,6 +379,25 @@ export default function Home() {
             {result.sql || "(no SQL generated)"}
           </pre>
 
+          {result.stage === "ok" &&
+            /drop|delete|insert|update|alter|truncate|;/i.test(nl) && (
+            <div
+              style={{
+                color: "#92400e",
+                marginTop: 16,
+                padding: 14,
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: 6,
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              The grammar blocked the original query. The model produced a safe
+              fallback instead.
+            </div>
+          )}
+
           {result.error && (
             <div
               style={{
