@@ -151,6 +151,7 @@ export default function Home() {
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalReport, setEvalReport] = useState<CaseReport | null>(null);
   const [evalError, setEvalError] = useState<string | null>(null);
+  const [reliabilityOpen, setReliabilityOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/cases")
@@ -477,21 +478,42 @@ export default function Home() {
 
       {/* ───────── Reliability panel card ───────── */}
       <section style={cardStyle}>
-        <div
+        <button
+          type="button"
+          onClick={() => setReliabilityOpen((o) => !o)}
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "baseline",
-            marginBottom: 12,
+            alignItems: "center",
+            width: "100%",
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            fontFamily: "inherit",
           }}
         >
-          <div style={labelStyle}>Reliability</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span
+              style={{
+                fontSize: 10,
+                color: mutedInk,
+                transition: "transform 150ms ease",
+                transform: reliabilityOpen ? "rotate(90deg)" : "rotate(0deg)",
+                display: "inline-block",
+              }}
+            >
+              ▶
+            </span>
+            <span style={labelStyle}>Reliability</span>
+          </div>
           <div style={{ fontSize: 11, color: mutedInk, letterSpacing: "0.05em" }}>
             Mode A · stochasticity
           </div>
-        </div>
+        </button>
 
-        <p style={{ color: mutedInk, fontSize: 13, margin: "0 0 16px", lineHeight: 1.5 }}>
+        {reliabilityOpen && <>
+        <p style={{ color: mutedInk, fontSize: 13, margin: "16px 0 16px", lineHeight: 1.5 }}>
           Run the same eval case multiple times and watch what varies. Every trial
           goes through the same NL → grammar → SQL → ClickHouse pipeline the query
           box uses.
@@ -737,6 +759,7 @@ export default function Home() {
             </div>
           </div>
         )}
+        </>}
       </section>
     </main>
   );
