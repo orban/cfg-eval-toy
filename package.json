@@ -1,8 +1,8 @@
 {
-  "name": "raindrop-takehome",
+  "name": "gpt5-cfg-app",
   "version": "0.1.0",
   "private": true,
-  "description": "CFG-constrained NL-to-SQL eval toy for the Raindrop take-home",
+  "description": "GPT-5 CFG-constrained natural-language-to-SQL with reliability evals",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

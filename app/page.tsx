@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { QueryResult, TrialResult } from "@/lib/types";
+import type { ConfidenceInterval } from "@/lib/stats";
+import type { CaseSummary } from "@/lib/eval-cases";
 
 const EXAMPLES = [
   "sum the total of all orders placed in the last 30 hours",
@@ -10,7 +12,6 @@ const EXAMPLES = [
   "count of delivered orders in the last 7 days",
 ];
 
-// Design tokens — matches Raindrop's signals dashboard visual language.
 const ink = "#0b1220";
 const paper = "#fafaf7";
 const mutedInk = "#6b7280";
@@ -35,17 +36,6 @@ const cardStyle: React.CSSProperties = {
   padding: 28,
   marginBottom: 24,
 };
-
-interface CaseSummary {
-  id: string;
-  intent: string;
-  nl: string;
-}
-
-interface ConfidenceInterval {
-  low: number;
-  high: number;
-}
 
 interface VariantGroup {
   sql: string;
@@ -136,6 +126,7 @@ export default function Home() {
   const [trials, setTrials] = useState(5);
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalReport, setEvalReport] = useState<CaseReport | null>(null);
+  const [evalError, setEvalError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/cases")
@@ -144,7 +135,10 @@ export default function Home() {
         setCases(data.canonical);
         if (data.canonical.length > 0) setSelectedCaseId(data.canonical[0].id);
       })
-      .catch(() => setCases([]));
+      .catch((e) => {
+        console.error("[cases] fetch failed", e);
+        setCases([]);
+      });
   }, []);
 
   async function runQueryCall() {
@@ -185,6 +179,7 @@ export default function Home() {
     if (!selectedCaseId) return;
     setEvalLoading(true);
     setEvalReport(null);
+    setEvalError(null);
     try {
       const res = await fetch("/api/eval", {
         method: "POST",
@@ -192,14 +187,13 @@ export default function Home() {
         body: JSON.stringify({ caseIds: [selectedCaseId], trialsPerCase: trials }),
       });
       if (!res.ok) {
-        const body = await res.text();
-        console.error("[eval] bad response", body);
+        setEvalError(`eval request failed (${res.status})`);
         return;
       }
       const data = (await res.json()) as { reports: CaseReport[] };
       setEvalReport(data.reports[0] ?? null);
     } catch (e) {
-      console.error("[eval] request failed", e);
+      setEvalError(`eval request failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setEvalLoading(false);
     }
@@ -524,6 +518,22 @@ export default function Home() {
               </button>
             </div>
           </>
+        )}
+
+        {evalError && (
+          <div
+            style={{
+              color: "#b91c1c",
+              marginTop: 16,
+              padding: 14,
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 6,
+              fontSize: 13,
+            }}
+          >
+            <strong>Error:</strong> {evalError}
+          </div>
         )}
 
         {evalReport && (
