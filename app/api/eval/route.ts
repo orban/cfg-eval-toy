@@ -14,10 +14,10 @@ import type { ConfidenceInterval } from "@/lib/stats";
 import type { TrialResult } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
-// Hard cap to stay under Vercel Hobby's 60s function timeout. ~7s per trial
-// in practice, so 5 trials × 1 case = ~35s. Plenty of headroom for cold start.
+// Hard cap so we don't burn the full 300s maxDuration. ~7s per trial in
+// practice, so 5 trials × 1 case = ~35s with plenty of headroom.
 const MAX_TRIALS_PER_CASE = 5;
 const MAX_CASES_PER_REQUEST = 5;
 
