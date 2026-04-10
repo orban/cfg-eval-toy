@@ -14,6 +14,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
+      <head>
+        <script defer data-domain="raindrop-cfg-eval-toy.vercel.app" src="https://plausible.ryo.wtf/js/script.js"></script>
+      </head>
       <body
         style={{
           fontFamily:
