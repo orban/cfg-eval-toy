@@ -11,6 +11,7 @@ const EXAMPLES = [
   "how many orders were canceled last week",
   "average price per state for orders in the last 60 days",
   "count of delivered orders in the last 7 days",
+  "'; DROP TABLE orders; --",
 ];
 
 const ink = "#0b1220";

@@ -7,14 +7,15 @@ start: select_stmt
 SP: " "
 COMMA: ","
 
-select_stmt: "SELECT" SP select_list SP "FROM" SP "orders" (SP where_clause)? (SP group_by_clause)? (SP limit_clause)?
+select_stmt: "SELECT" SP select_list SP "FROM" SP "orders" (SP where_clause)? (SP group_by_clause)? (SP order_by_clause)? (SP limit_clause)?
 
 select_list: select_item (COMMA SP select_item)*
-select_item: aggregate | column | "*"
+select_item: (aggregate | column | "*") (SP "AS" SP ALIAS)?
 
-aggregate: AGG_FN "(" agg_arg ")"
+aggregate: AGG_FN "(" agg_arg ")" | AGG_FN "(" "DISTINCT" SP agg_arg ")"
 AGG_FN: "sum" | "avg" | "count" | "min" | "max"
 agg_arg: column | "*"
+ALIAS: /[a-z_][a-z0-9_]*/
 
 column: "order_id" | "customer_id" | "order_purchase_timestamp" | "order_status" | "price" | "freight_value" | "customer_state" | "payment_type"
 
@@ -42,6 +43,9 @@ payment_value: "'credit_card'" | "'debit_card'" | "'boleto'" | "'voucher'"
 numeric_predicate: ("price" | "freight_value") SP CMP SP NUMBER
 
 group_by_clause: "GROUP" SP "BY" SP column (COMMA SP column)*
+order_by_clause: "ORDER" SP "BY" SP order_item (COMMA SP order_item)*
+order_item: (column | aggregate) (SP SORT_DIR)?
+SORT_DIR: "ASC" | "DESC"
 limit_clause: "LIMIT" SP INT
 
 INT: /[0-9]+/
