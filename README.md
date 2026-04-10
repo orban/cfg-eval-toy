@@ -18,6 +18,35 @@ to 5 times and shows the raw pass count plus the SQL that came back each
 time. This is Mode A (stochasticity): same input, repeated. Mode B
 (semantic robustness — paraphrase sweep) is the next step but not shipped.
 
+## Dataset
+
+Synthetic 10,000-row `orders` table in ClickHouse Cloud, generated with a fixed seed for reproducibility.
+
+**Schema:**
+
+| Column | Type | Example |
+|---|---|---|
+| order_id | String (UUID) | `40d6976c-45f2-4f50-87b0-8fd051ac756e` |
+| customer_id | UInt32 | `419` |
+| order_purchase_timestamp | DateTime | `2026-01-07 18:02:27` |
+| order_status | String | `delivered`, `canceled`, `shipped`, `processing` |
+| price | Float64 | `39.01` |
+| freight_value | Float64 | `6.03` |
+| customer_state | String | `NY`, `CA`, `TX`, ... (10 states) |
+| payment_type | String | `credit_card`, `debit_card`, `boleto`, `voucher` |
+
+**Sample rows:**
+
+| order_id | customer_id | timestamp | status | price | freight | state | payment |
+|---|---|---|---|---|---|---|---|
+| `40d6976c...` | 419 | 2026-01-07 18:02:27 | delivered | 39.01 | 6.03 | NY | credit_card |
+| `04b53436...` | 94 | 2026-01-07 19:21:34 | canceled | 6.96 | 0.77 | WA | debit_card |
+| `2b112ff3...` | 3 | 2026-01-07 20:38:52 | canceled | 15.43 | 1.35 | CO | credit_card |
+| `731a83c6...` | 168 | 2026-01-07 20:49:08 | delivered | 55.95 | 10.31 | WA | credit_card |
+| `5a39a15b...` | 230 | 2026-01-07 23:00:22 | delivered | 45.27 | 7.87 | NY | credit_card |
+
+Timestamps span 2026-01-07 to 2026-04-07 so that "last 30 hours", "last week", and "last 60 days" all return meaningful results. `NOW()` is pinned to the max timestamp in the data (`2026-04-07 17:55:49`) for eval determinism.
+
 ## Stack
 
 - **Next.js 15 + React 19 + TypeScript**, deployed on Vercel (Hobby)
