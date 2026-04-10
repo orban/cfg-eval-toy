@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { QueryResult, TrialResult } from "@/lib/types";
+import { wilsonCI, confidenceLabel } from "@/lib/stats";
 import type { ConfidenceInterval } from "@/lib/stats";
 import type { CaseSummary } from "@/lib/eval-cases";
 
@@ -53,6 +54,29 @@ interface CaseReport {
   ci: ConfidenceInterval;
   confidence: "LOW" | "MED" | "HIGH";
   variants: VariantGroup[];
+}
+
+function groupVariants(trials: TrialResult[]): VariantGroup[] {
+  const map = new Map<string, VariantGroup>();
+  for (const t of trials) {
+    const key = t.sql || "(no SQL)";
+    const existing = map.get(key);
+    if (existing) {
+      existing.count += 1;
+      if (!t.passed && existing.passed) {
+        existing.passed = false;
+        existing.firstError = t.error;
+      }
+    } else {
+      map.set(key, {
+        sql: key,
+        count: 1,
+        passed: t.passed,
+        firstError: t.passed ? undefined : t.error,
+      });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count);
 }
 
 function formatCell(value: unknown): string {
@@ -190,8 +214,46 @@ export default function Home() {
         setEvalError(`eval request failed (${res.status})`);
         return;
       }
-      const data = (await res.json()) as { reports: CaseReport[] };
-      setEvalReport(data.reports[0] ?? null);
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        setEvalError("no response stream");
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const accumulated: TrialResult[] = [];
+      let nl = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const msg = JSON.parse(line);
+          if (msg.done) break;
+          accumulated.push(msg.trial);
+          nl = msg.nl;
+
+          const passes = accumulated.filter((t) => t.passed).length;
+          const ci = wilsonCI(passes, accumulated.length);
+          setEvalReport({
+            caseId: msg.caseId,
+            nl,
+            trials: [...accumulated],
+            passes,
+            passRate: accumulated.length > 0 ? passes / accumulated.length : 0,
+            ci,
+            confidence: confidenceLabel(ci),
+            variants: groupVariants(accumulated),
+          });
+        }
+      }
     } catch (e) {
       setEvalError(`eval request failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
