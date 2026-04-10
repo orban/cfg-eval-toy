@@ -38,16 +38,19 @@ function checkExpectedValues(
     if (!rows || rows.length === 0) {
       return `expected scalar ~${caseDef.expected_scalar}, got empty result set`;
     }
-    const firstValue = Object.values(rows[0])[0];
-    const asNumber = typeof firstValue === "number" ? firstValue : Number(firstValue);
-    if (!Number.isFinite(asNumber)) {
-      return `expected scalar ~${caseDef.expected_scalar}, got non-numeric ${firstValue}`;
-    }
     const expected = caseDef.expected_scalar;
     const tolerance =
       caseDef.expected_scalar_tolerance ?? Math.max(Math.abs(expected) * 0.005, 0.5);
-    if (Math.abs(asNumber - expected) > tolerance) {
-      return `expected scalar ~${expected} (±${tolerance}), got ${asNumber}`;
+    // Scan all columns in the first row for a matching numeric value.
+    // The model might return extra columns (e.g. ORDER BY + LIMIT instead
+    // of an aggregate), so we check every value, not just the first.
+    const values = Object.values(rows[0]);
+    const match = values.some((v) => {
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) && Math.abs(n - expected) <= tolerance;
+    });
+    if (!match) {
+      return `expected scalar ~${expected} (±${tolerance}), got [${values.join(", ")}]`;
     }
   }
   if (caseDef.expected_row_count !== undefined) {
